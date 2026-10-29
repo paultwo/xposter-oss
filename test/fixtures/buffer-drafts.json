@@ -1,0 +1,34 @@
+{
+  "posts_open": [
+    {
+      "id": "a00000000000000000000001",
+      "status": "draft",
+      "text": "How a small team moved its help docs in one weekend\n\nOur help center lived in three places. Nobody knew which page was current, and support answered the same five questions every day. We moved everything into one place over a weekend. Here's what we did, step by step, so you can do it too.\n\nWHAT WAS BROKEN\n\nOld pages ranked above new ones in search. Links in emails pointed at pages that no longer existed. Two pages gave opposite answers about refunds. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test.\n\nSTEP 1: LIST EVERYTHING\n\nWe exported every page title and URL into a spreadsheet and marked each one keep, merge, or drop. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test.\n\nSTEP 2: PICK ONE OWNER\n\nOne person approved every page. That made the weekend possible, because nobody waited on a meeting. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test.\n\nSTEP 3: REDIRECT\n\nEvery old URL got a redirect to its new home. We tested each one with a script before we switched over. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test.\n\nSTEP 4: TELL PEOPLE\n\nWe sent one short note to customers and pinned the new link in the support inbox. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test.\n\nWHAT CHANGED\n\nRepeat questions dropped within a week. Support had time to write the pages people actually asked for. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test. This is fictional sample text for the import test.\n\nIf you try this, start with the list. Everything else follows from it.",
+      "createdAt": "2026-01-02T10:00:00.000Z"
+    },
+    {
+      "id": "a00000000000000000000002",
+      "status": "draft",
+      "text": "We've worked remotely for years.\n\nRemote work runs on trust, and trust comes from working in the open. Share what's stuck. Say what's working and what isn't. Keep adjusting.",
+      "createdAt": "2026-01-02T10:01:00.000Z"
+    },
+    {
+      "id": "a00000000000000000000003",
+      "status": "draft",
+      "text": "I run my team AI-first. Where it shows up each week:\n\nFinance: [what AI does]\nProduct: drafts and reviews.\nPeople: [what AI does, and never decides]\nCustomers: [what AI does]\nStrategy: [what AI does]\nLegal: [first pass, then a lawyer?]\n\nWhat I don't hand off: [your line]",
+      "createdAt": "2026-01-01T09:00:00.000Z"
+    },
+    {
+      "id": "a00000000000000000000004",
+      "status": "draft",
+      "text": "A lot of \"nice\" at work is self-protection.\n\nNice dodges the hard talk. Kind tells the truth early, because it cares how things turn out.\n\n[One real work example, no names.]\n\nKindness only counts if it's true.",
+      "createdAt": "2026-01-01T09:01:00.000Z"
+    },
+    {
+      "id": "a00000000000000000000005",
+      "status": "draft",
+      "text": "Giving is up. Givers are not.\n\nA made-up example for this test:\nDollars: up\nDonors: down\nNew donors: down\nRepeat donors: up\n\nGrowth comes from people who already give. The hard part is new givers and their second gift.\n\n[Your take on earning it.]",
+      "createdAt": "2026-01-01T09:02:00.000Z"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+node_modules/
+worker-configuration.d.ts
+.wrangler/
+.dev.vars
+.env
+*.env
+!.dev.vars.example
+wrangler.local.jsonc
+wrangler.*.local.jsonc
+dist/
+test-results/
+playwright-report/
+blob-report/
+proof-local/
+buffer-export.json
+*.log
+.DS_Store

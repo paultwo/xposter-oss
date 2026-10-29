@@ -1,0 +1,23 @@
+title = "x-poster"
+
+# Keep gitleaks' built-in rules. Without this, a custom config scans with no rules.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "The vitest AES test key, one binding line."
+paths = ['''vitest\.config\.ts''']
+regexTarget = "line"
+regexes = ['''TOKEN_ENC_KEY: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="''']
+
+[[allowlists]]
+description = "The proof script writes that same test key."
+paths = ['''scripts/dev-proof\.sh''']
+regexTarget = "line"
+regexes = ['''TOKEN_ENC_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=''']
+
+[[allowlists]]
+description = "The same test key in the crypto unit test."
+paths = ['''test/unit/hash-crypto\.test\.ts''']
+regexTarget = "line"
+regexes = ['''const KEY = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";''']

@@ -1,0 +1,35 @@
+{
+  "name": "x-poster",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --config wrangler.local.jsonc",
+    "deploy": "node scripts/preflight-deploy.mjs && wrangler deploy --config wrangler.local.jsonc",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "fonts": "node scripts/copy-fonts.mjs",
+    "check": "npm run typecheck && npm test",
+    "types": "wrangler types --strict-vars false",
+    "prepare": "wrangler types --strict-vars false"
+  },
+  "dependencies": {
+    "@fontsource/newsreader": "^5.2.8",
+    "@fontsource/public-sans": "^5.2.7",
+    "hono": "^4.8.3",
+    "jose": "^6.0.11",
+    "twitter-text": "^3.1.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
+    "@biomejs/biome": "^2.2.2",
+    "@cloudflare/vitest-pool-workers": "^0.10.7",
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^26.6.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.35.0"
+  }
+}

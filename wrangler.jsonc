@@ -1,0 +1,60 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "x-poster-unconfigured",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-12-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "build": {
+    "command": "node scripts/refuse-committed-deploy.mjs"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "traces": {
+      "enabled": true
+    }
+  },
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "html_handling": "none",
+    "not_found_handling": "none",
+    "run_worker_first": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "x-poster",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "x-poster-media"
+    }
+  ],
+  "vars": {
+    "ENVIRONMENT": "production",
+    "POSTING_ENABLED": "false",
+    "X_STANDARD_POST_LIMIT": "280",
+    "X_PREMIUM_POST_LIMIT": "25000",
+    "X_SHOW_MORE_AT": "280",
+    "MAX_DAILY_POSTS": "20",
+    "ALLOWED_APPROVER_EMAILS": "you@example.com",
+    "ACCESS_TEAM_DOMAIN": "team.example.invalid",
+    "ACCESS_AUD": "YOUR_ACCESS_AUD",
+    "ACCESS_CERTS_URL": "",
+    "X_API_BASE": "https://api.x.com",
+    "X_AUTHORIZE_URL": "https://x.com/i/oauth2/authorize",
+    "INTAKE_ACCESS_CLIENT_ID": "",
+    "X_FETCH_TIMEOUT_MS": "15000",
+    "PUBLIC_ORIGIN": "https://poster.example.com"
+  }
+}
