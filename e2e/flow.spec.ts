@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type APIResponse, type Page } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
+import { ARTIFACTS, SHOTS } from "./artifacts";
 import { cycleDialogFocus } from "./dialog-focus";
 import { upcomingSlot } from "./slot";
 
@@ -56,9 +57,9 @@ async function axe(
   const serious = result.violations.filter(
     (item) => item.impact === "serious" || item.impact === "critical",
   );
-  await mkdir("/opt/cursor/artifacts", { recursive: true });
+  await mkdir(ARTIFACTS, { recursive: true });
   await writeFile(
-    `/opt/cursor/artifacts/axe-${name}.json`,
+    `${ARTIFACTS}/axe-${name}.json`,
     JSON.stringify({ violations: result.violations, serious: serious.length }, null, 2),
   );
   expect(serious, JSON.stringify(serious, null, 2)).toEqual([]);
@@ -125,11 +126,11 @@ test("draft, approve, schedule, cron, history", async ({ page }) => {
   await page.locator("#alt-1-0").fill("A tan swatch with a dark green border.");
   await page.getByRole("button", { name: "Save draft" }).click();
   await expect(page.getByText("Draft saved.")).toBeVisible();
-  await page.screenshot({ path: "/opt/cursor/artifacts/screenshots/flow-draft.png", fullPage: true });
+  await page.screenshot({ path: `${SHOTS}/flow-draft.png`, fullPage: true });
   await page.getByRole("link", { name: "Review and approve" }).click();
   await page.getByRole("button", { name: "Approve thread" }).click();
   await expect(page.getByText("Approved.")).toBeVisible();
-  await page.screenshot({ path: "/opt/cursor/artifacts/screenshots/flow-approved.png", fullPage: true });
+  await page.screenshot({ path: `${SHOTS}/flow-approved.png`, fullPage: true });
   const slot = upcomingSlot();
   await page.locator("#schedule-date").fill(slot.date);
   await page.locator("#schedule-time").fill(slot.time);
@@ -148,8 +149,10 @@ test("draft, approve, schedule, cron, history", async ({ page }) => {
   }
   await page.goto("/history");
   await expect(page.getByText("Mock segment one.")).toBeVisible();
-  await expect(page.getByText("Posted", { exact: true })).toBeVisible();
-  await page.screenshot({ path: "/opt/cursor/artifacts/screenshots/flow-history.png", fullPage: true });
+  await expect(
+    page.locator(".history > li", { hasText: "Mock segment one." }).getByText("Posted", { exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/flow-history.png`, fullPage: true });
   const requests = (await (await fetch("http://127.0.0.1:9099/__requests")).json()) as { requests: Array<{ path: string }> };
   expect(requests.requests.some((item) => item.path.startsWith("/2/dm") || item.path.startsWith("/2/chat"))).toBe(false);
 });
@@ -177,10 +180,10 @@ test("intake draft shows in the queue, and an edit returns it to draft", async (
   expect(staged.status()).toBe(200);
   await page.goto("/?status=needs_approval");
   await expect(page.locator(".post-text", { hasText: "Draft from the intake API." })).toBeVisible();
-  await page.screenshot({ path: "/opt/cursor/artifacts/screenshots/dashboard-intake-awaiting.png", fullPage: true });
+  await page.screenshot({ path: `${SHOTS}/dashboard-intake-awaiting.png`, fullPage: true });
   await page.goto("/queue");
   await expect(page.getByText("Draft from the intake API.")).toBeVisible();
-  await page.screenshot({ path: "/opt/cursor/artifacts/screenshots/queue-intake.png", fullPage: true });
+  await page.screenshot({ path: `${SHOTS}/queue-intake.png`, fullPage: true });
   await page.getByRole("link", { name: "Draft from the intake API." }).click();
   await page.locator("#text-0").fill("Edited after it was only a draft.");
   await page.getByRole("button", { name: "Save draft" }).click();
@@ -267,12 +270,12 @@ test("a timeout leaves the thread for you", async ({ page }) => {
   await cycleDialogFocus(page, resend);
   await page.keyboard.press("Escape");
   await expect(sendAgain).toBeFocused();
-  await page.screenshot({ path: "/opt/cursor/artifacts/screenshots/needs-review-1440.png", fullPage: true });
+  await page.screenshot({ path: `${SHOTS}/needs-review-1440.png`, fullPage: true });
   await axe(page, "needs-you");
   await page.emulateMedia({ colorScheme: "dark" });
   for (const width of [375, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.screenshot({ path: `/opt/cursor/artifacts/screenshots/dark-needs-you-${width}.png`, fullPage: true });
+    await page.screenshot({ path: `${SHOTS}/dark-needs-you-${width}.png`, fullPage: true });
   }
   await page.emulateMedia({ colorScheme: "light" });
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -576,7 +579,7 @@ test("a failed post and a missed post sit with needs-you on the dashboard", asyn
     page.getByRole("link", { name: /^Needs you \d+/ }),
   ).toBeVisible();
   await expect(page.getByText(/post needs you|posts need you/)).toBeVisible();
-  await page.screenshot({ path: "/opt/cursor/artifacts/screenshots/dashboard-needs-failed-missed-1440.png", fullPage: true });
+  await page.screenshot({ path: `${SHOTS}/dashboard-needs-failed-missed-1440.png`, fullPage: true });
   await axe(page, "dashboard-needs-failed-missed");
 });
 

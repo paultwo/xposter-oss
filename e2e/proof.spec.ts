@@ -4,9 +4,10 @@ import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { etParts, etToUtc, formatDue, formatEtDay } from "../src/lib/time";
+import { ARTIFACTS, SHOTS } from "./artifacts";
 import { upcomingSlot } from "./slot";
 
-const out = "/opt/cursor/artifacts/screenshots";
+const out = SHOTS;
 
 async function sign(): Promise<string> {
   const response = await fetch("http://127.0.0.1:9099/__sign", {
@@ -27,9 +28,9 @@ async function axe(page: Page, name: string): Promise<void> {
   const serious = result.violations.filter(
     (item) => item.impact === "serious" || item.impact === "critical",
   );
-  await mkdir("/opt/cursor/artifacts", { recursive: true });
+  await mkdir(ARTIFACTS, { recursive: true });
   await writeFile(
-    `/opt/cursor/artifacts/axe-${name}.json`,
+    `${ARTIFACTS}/axe-${name}.json`,
     JSON.stringify(
       { violations: result.violations, serious: serious.length },
       null,
@@ -217,7 +218,7 @@ test("dark mode, scheduled queue, post-now, photo preview, and connected setting
     }),
   ).toHaveCount(0);
   await page.emulateMedia({ colorScheme: "light" });
-  const shots = "/opt/cursor/artifacts/screenshots/design-r4";
+  const shots = `${SHOTS}/design-r4`;
   await mkdir(shots, { recursive: true });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.screenshot({

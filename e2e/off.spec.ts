@@ -2,8 +2,9 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
+import { ARTIFACTS, SHOTS } from "./artifacts";
 
-const out = "/opt/cursor/artifacts/screenshots";
+const out = SHOTS;
 async function sign(): Promise<string> {
   const response = await fetch("http://127.0.0.1:9099/__sign", {
     method: "POST",
@@ -26,8 +27,8 @@ async function shot(page: Page, name: string): Promise<void> {
 async function axe(page: Page, name: string): Promise<void> {
   const result = await new AxeBuilder({ page }).analyze();
   const serious = result.violations.filter((item) => item.impact === "serious" || item.impact === "critical");
-  await mkdir("/opt/cursor/artifacts", { recursive: true });
-  await writeFile(`/opt/cursor/artifacts/axe-${name}.json`, JSON.stringify({ violations: result.violations, serious: serious.length }, null, 2));
+  await mkdir(ARTIFACTS, { recursive: true });
+  await writeFile(`${ARTIFACTS}/axe-${name}.json`, JSON.stringify({ violations: result.violations, serious: serious.length }, null, 2));
   expect(serious, JSON.stringify(serious, null, 2)).toEqual([]);
 }
 
@@ -300,11 +301,11 @@ test("drafts dashboard previews, filters, and approves", async ({ page }) => {
   await page.goto("/?status=approved");
   await expect(page.getByText("Three things I learned")).toBeVisible();
   await shot(page, "dashboard-approved-1440");
-  await mkdir("/opt/cursor/artifacts", { recursive: true });
-  await writeFile("/opt/cursor/artifacts/keyboard-walkthrough-dashboard.txt", seen.join("\n"));
+  await mkdir(ARTIFACTS, { recursive: true });
+  await writeFile(`${ARTIFACTS}/keyboard-walkthrough-dashboard.txt`, seen.join("\n"));
   await page.goto("/?status=needs_approval");
   const snapshot = await page.locator("main").ariaSnapshot();
-  await writeFile("/opt/cursor/artifacts/screen-reader-note-dashboard.md", `# Screen reader note, Drafts dashboard\n\nVoiceOver and NVDA are not installed on this Linux agent. This is the accessibility tree Playwright exposes for the dashboard filtered to Needs your approval, after approving the thread from the keyboard.\n\n\`\`\`\n${snapshot}\n\`\`\`\n`);
+  await writeFile(`${ARTIFACTS}/screen-reader-note-dashboard.md`, `# Screen reader note, Drafts dashboard\n\nVoiceOver and NVDA are not installed on this Linux agent. This is the accessibility tree Playwright exposes for the dashboard filtered to Needs your approval, after approving the thread from the keyboard.\n\n\`\`\`\n${snapshot}\n\`\`\`\n`);
 });
 
 test("removing a middle segment keeps the rest, and added segments count live", async ({ page }) => {
@@ -344,13 +345,13 @@ test("keyboard only reaches save, and the tree exposes names", async ({ page }) 
     });
     seen.push(current);
   }
-  await mkdir("/opt/cursor/artifacts", { recursive: true });
-  await writeFile("/opt/cursor/artifacts/keyboard-walkthrough.txt", seen.join("\n"));
+  await mkdir(ARTIFACTS, { recursive: true });
+  await writeFile(`${ARTIFACTS}/keyboard-walkthrough.txt`, seen.join("\n"));
   expect(seen.some((line) => line.includes("Text"))).toBe(true);
   await page.locator("#text-0").focus();
   await page.keyboard.type("Keyboard draft.");
   await page.keyboard.press("Tab");
   const snapshot = await page.locator("main").ariaSnapshot();
-  await writeFile("/opt/cursor/artifacts/screen-reader-note.md", `# Screen reader note\n\nVoiceOver and NVDA are not installed on this Linux agent. The check below is the accessibility tree Playwright exposes to assistive technology, taken after a keyboard-only pass on the composer.\n\n\`\`\`\n${snapshot}\n\`\`\`\n`);
+  await writeFile(`${ARTIFACTS}/screen-reader-note.md`, `# Screen reader note\n\nVoiceOver and NVDA are not installed on this Linux agent. The check below is the accessibility tree Playwright exposes to assistive technology, taken after a keyboard-only pass on the composer.\n\n\`\`\`\n${snapshot}\n\`\`\`\n`);
   expect(snapshot.length).toBeGreaterThan(20);
 });
