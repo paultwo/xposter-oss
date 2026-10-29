@@ -1,5 +1,6 @@
 import { env } from "cloudflare:test";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { deleteItem } from "../../src/items/delete";
 import { dispatch } from "../../src/posting/dispatch";
 import {
   approveAndSchedule,
@@ -19,9 +20,30 @@ beforeEach(async () => {
   await resetPostingGate();
 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 async function rowCount(sql: string, id: string): Promise<number> {
   const row = await env.DB.prepare(sql).bind(id).first<{ n: number }>();
   return row?.n ?? 0;
+}
+
+async function expectNothingLeft(id: string): Promise<void> {
+  for (const table of ["items", "segments", "post_attempts", "media"]) {
+    const column = table === "items" ? "id" : "item_id";
+    expect(
+      await rowCount(
+        `SELECT COUNT(*) AS n FROM ${table} WHERE ${column} = ?`,
+        id,
+      ),
+      table,
+    ).toBe(0);
+  }
+  const orphans = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM daily_slots WHERE segment_id NOT IN (SELECT id FROM segments)",
+  ).first<{ n: number }>();
+  expect(orphans?.n ?? 0, "daily_slots").toBe(0);
 }
 
 describe("delete", () => {
@@ -113,6 +135,132 @@ describe("delete", () => {
     ).toBe(0);
   });
 
+  it("refuses a delete that arrives after the cron claimed the post, and the post goes out once", async () => {
+    await connectX();
+    const session = await asUser();
+    const item = await createItem(session, {
+      kind: "post",
+      segments: [{ text: "Claimed before the delete" }],
+    });
+    await approveAndSchedule(session, item);
+    // The tweet call only happens after the claim committed, so a delete
+    // sent from inside it always lands on a claimed row.
+    let racing: Promise<Response> | null = null;
+    xstate.onTweet = (index) => {
+      racing = send(session, `/api/items/${item.id}`, "DELETE", {
+        confirm: true,
+      });
+      return {
+        statusCode: 201,
+        data: JSON.stringify({ data: { id: String(9100 + index), text: "" } }),
+        responseOptions: { headers: { "content-type": "application/json" } },
+      };
+    };
+    const result = await dispatch(env, Date.now());
+    expect(result.posted).toBe(1);
+    expect(racing).not.toBeNull();
+    const refused = await (racing as unknown as Promise<Response>);
+    expect(refused.status).toBe(409);
+    expect(xstate.tweets.map((tweet) => tweet.text)).toEqual([
+      "Claimed before the delete",
+    ]);
+    expect((await readItem(session, item.id)).status).toBe("posted");
+    expect(
+      await rowCount(
+        "SELECT COUNT(*) AS n FROM audit_log WHERE action = 'delete' AND json_extract(detail_json, '$.item_id') = ?",
+        item.id,
+      ),
+    ).toBe(0);
+  });
+
+  it("a delete and a dispatch at the same moment end with exactly one outcome", async () => {
+    await connectX();
+    const session = await asUser();
+    for (let round = 0; round < 5; round++) {
+      resetX();
+      const text = `Race round ${round}`;
+      const item = await createItem(session, {
+        kind: "post",
+        segments: [{ text }],
+      });
+      await approveAndSchedule(session, item);
+      const [result, deleted] = await Promise.all([
+        dispatch(env, Date.now()),
+        send(session, `/api/items/${item.id}`, "DELETE", { confirm: true }),
+      ]);
+      const sent = xstate.tweets.filter((tweet) => tweet.text === text).length;
+      const remaining = await rowCount(
+        "SELECT COUNT(*) AS n FROM items WHERE id = ?",
+        item.id,
+      );
+      if (deleted.status === 200) {
+        expect(sent).toBe(0);
+        expect(remaining).toBe(0);
+        expect(result.posted).toBe(0);
+      } else {
+        expect(deleted.status).toBe(409);
+        expect(sent).toBe(1);
+        expect(remaining).toBe(1);
+        expect((await readItem(session, item.id)).status).toBe("posted");
+      }
+    }
+  });
+
+  it("still deletes the item when the R2 blob delete fails, and logs it without the key", async () => {
+    await connectX();
+    const session = await asUser();
+    const item = await createItem(session, {
+      kind: "post",
+      segments: [
+        {
+          text: "Has an image",
+          media: [{ alt_text: "A chart", data_base64: PNG, mime: "image/png" }],
+        },
+      ],
+    });
+    const key =
+      (
+        await env.DB.prepare("SELECT r2_key FROM media WHERE item_id = ?")
+          .bind(item.id)
+          .first<{ r2_key: string }>()
+      )?.r2_key ?? "";
+    expect(key).not.toBe("");
+    const lines: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((line: unknown) => {
+      lines.push(String(line));
+    });
+    const failing = {
+      ...env,
+      MEDIA: {
+        delete: async () => {
+          throw new Error("R2 is down");
+        },
+      } as unknown as R2Bucket,
+    };
+    const deleted = await deleteItem(
+      failing,
+      item.id,
+      "you@example.com",
+      Date.now(),
+    );
+    expect(deleted).toEqual({ id: item.id, status: "draft" });
+    expect(
+      await rowCount("SELECT COUNT(*) AS n FROM items WHERE id = ?", item.id),
+    ).toBe(0);
+    const failures = lines.filter((line) =>
+      line.includes('"media_delete_failed"'),
+    );
+    expect(failures).toHaveLength(1);
+    expect(JSON.parse(failures[0] ?? "{}")).toEqual({
+      level: "error",
+      event: "media_delete_failed",
+      item_id: item.id,
+      reason: "Error",
+    });
+    expect(failures[0]).not.toContain(key);
+    expect(await env.MEDIA.head(key)).not.toBeNull();
+  });
+
   it("deletes an approved draft and an archived draft", async () => {
     await connectX();
     const session = await asUser();
@@ -147,35 +295,135 @@ describe("delete", () => {
     }
   });
 
-  it("refuses an archived item that may have posted, and offers no Delete for it", async () => {
+  it("deletes a failed post, and neither the cron nor Send again can bring it back", async () => {
     await connectX();
     const session = await asUser();
-    const open = await createItem(session, {
+    const item = await createItem(session, {
       kind: "post",
-      segments: [{ text: "Archived with an open attempt" }],
+      segments: [{ text: "Rejected by X" }],
     });
-    const segment = await env.DB.prepare(
-      "SELECT id FROM segments WHERE item_id = ?",
-    )
-      .bind(open.id)
-      .first<{ id: string }>();
-    await env.DB.prepare(
-      "INSERT INTO post_attempts (id, segment_id, item_id, lease_id, started_at, outcome) VALUES ('att-open', ?, ?, 'lease-x', 1, NULL)",
-    )
-      .bind(segment?.id ?? "", open.id)
-      .run();
-    await env.DB.prepare("UPDATE items SET status = 'archived' WHERE id = ?")
-      .bind(open.id)
-      .run();
-    const refused = await send(session, `/api/items/${open.id}`, "DELETE", {
+    await approveAndSchedule(session, item);
+    xstate.onTweet = () => ({ statusCode: 400, data: "" });
+    await dispatch(env, Date.now());
+    xstate.onTweet = null;
+    const failed = await readItem(session, item.id);
+    expect(failed.status).toBe("needs_you");
+    expect(failed.needs_reason).toBe("rejected");
+    expect(xstate.tweets).toHaveLength(1);
+
+    const dashboard = await SELFGet(session, "/?status=needs_you");
+    expect(dashboard).toContain(`data-dialog="delete-${item.id}"`);
+    expect(dashboard).toContain("Delete this failed post?");
+    expect(dashboard).toContain("It will not be sent again.");
+    const history = await SELFGet(session, "/history");
+    expect(history).toContain(`data-dialog="delete-${item.id}"`);
+
+    const done = await postForm(session, `/items/${item.id}/delete`, {
+      confirm: "yes",
+      back: "history",
+    });
+    expect(done.status).toBe(303);
+    expect(done.headers.get("location")).toBe("/history?notice=deleted");
+    await expectNothingLeft(item.id);
+    const retry = await send(session, `/api/items/${item.id}/retry`, "POST", {
+      position: 0,
       confirm: true,
     });
-    expect(refused.status).toBe(409);
-    expect(await refused.text()).toContain("can't be deleted here");
+    expect(retry.status).toBe(404);
+    await dispatch(env, Date.now());
+    await dispatch(env, Date.now() + 120_000);
+    expect(xstate.tweets).toHaveLength(1);
+    const audit = await env.DB.prepare(
+      "SELECT from_status, detail_json FROM audit_log WHERE action = 'delete' AND json_extract(detail_json, '$.item_id') = ?",
+    )
+      .bind(item.id)
+      .first<{ from_status: string; detail_json: string }>();
+    expect(audit?.from_status).toBe("needs_you");
+    expect(JSON.parse(audit?.detail_json ?? "{}").needs_reason).toBe(
+      "rejected",
+    );
+  });
+
+  it("deletes an unconfirmed post once its last attempt has finished, and frees its slot and attempt", async () => {
+    await connectX();
+    const session = await asUser();
+    const item = await createItem(session, {
+      kind: "post",
+      segments: [{ text: "X answered 500" }],
+    });
+    await approveAndSchedule(session, item);
+    xstate.dropTweet = 0;
+    await dispatch(env, Date.now());
+    xstate.dropTweet = null;
+    const unknown = await readItem(session, item.id);
+    expect(unknown.status).toBe("needs_you");
+    expect(unknown.needs_reason).toBe("unknown");
     expect(
-      await rowCount("SELECT COUNT(*) AS n FROM items WHERE id = ?", open.id),
+      await rowCount(
+        "SELECT COUNT(*) AS n FROM post_attempts WHERE item_id = ? AND outcome IS NULL",
+        item.id,
+      ),
+    ).toBe(1);
+    // A sweep can leave the hold in place; plant one so the delete has to
+    // free it.
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO daily_slots (id, day_key, segment_id, state, created_at)
+       SELECT 'slot-unknown', '2026-01-01', id, 'held', ? FROM segments WHERE item_id = ?`,
+    )
+      .bind(Date.now(), item.id)
+      .run();
+    expect(
+      await rowCount(
+        "SELECT COUNT(*) AS n FROM daily_slots WHERE state = 'held' AND segment_id IN (SELECT id FROM segments WHERE item_id = ?)",
+        item.id,
+      ),
     ).toBe(1);
 
+    await env.DB.prepare("UPDATE items SET lease_until = ? WHERE id = ?")
+      .bind(Date.now() + 60_000, item.id)
+      .run();
+    const early = await send(session, `/api/items/${item.id}`, "DELETE", {
+      confirm: true,
+    });
+    expect(early.status).toBe(409);
+    expect(await early.text()).toContain(
+      "Wait until the last attempt has finished, then check X.",
+    );
+    await env.DB.prepare("UPDATE items SET lease_until = ? WHERE id = ?")
+      .bind(Date.now() - 60_000, item.id)
+      .run();
+    const page = await SELFGet(session, "/history");
+    expect(page).toContain("Delete this unconfirmed post?");
+    expect(page).toContain("does not remove anything from X");
+
+    const deleted = await send(session, `/api/items/${item.id}`, "DELETE", {
+      confirm: true,
+    });
+    expect(deleted.status).toBe(200);
+    expect(await deleted.json()).toEqual({
+      deleted: true,
+      id: item.id,
+      was: "needs_you",
+    });
+    await expectNothingLeft(item.id);
+    expect(
+      await rowCount(
+        "SELECT COUNT(*) AS n FROM post_attempts WHERE item_id = ?",
+        item.id,
+      ),
+    ).toBe(0);
+    const retry = await send(session, `/api/items/${item.id}/retry`, "POST", {
+      position: 0,
+      confirm: true,
+    });
+    expect(retry.status).toBe(404);
+    await dispatch(env, Date.now() + 120_000);
+    expect(xstate.tweets).toHaveLength(1);
+  });
+
+  it("deletes an archived item that was once needs-you", async () => {
+    await connectX();
+    const session = await asUser();
     const needs = await createItem(session, {
       kind: "post",
       segments: [{ text: "Archived after needs-you" }],
@@ -185,14 +433,111 @@ describe("delete", () => {
     )
       .bind(needs.id)
       .run();
-    const page = await send(session, "/archived", "GET");
-    const html = await page.text();
-    expect(html).toContain("Archived after needs-you");
-    expect(html).not.toContain(`delete-${needs.id}`);
-    const again = await send(session, `/api/items/${needs.id}`, "DELETE", {
+    const html = await SELFGet(session, "/archived");
+    expect(html).toContain(`delete-${needs.id}`);
+    const deleted = await send(session, `/api/items/${needs.id}`, "DELETE", {
       confirm: true,
     });
-    expect(again.status).toBe(409);
+    expect(deleted.status).toBe(200);
+  });
+
+  it("refuses a needs-you thread whose first post is on X, and offers no Delete", async () => {
+    await connectX();
+    const session = await asUser();
+    const item = await createItem(session, {
+      kind: "thread",
+      segments: [{ text: "Live part" }, { text: "Rejected part" }],
+    });
+    await approveAndSchedule(session, item);
+    expect((await dispatch(env, Date.now())).posted).toBe(1);
+    xstate.onTweet = () => ({ statusCode: 400, data: "" });
+    await dispatch(env, Date.now());
+    xstate.onTweet = null;
+    expect((await readItem(session, item.id)).status).toBe("needs_you");
+    const history = await SELFGet(session, "/history");
+    expect(history).not.toContain(`data-dialog="delete-${item.id}"`);
+    const refused = await send(session, `/api/items/${item.id}`, "DELETE", {
+      confirm: true,
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.text()).toContain("has any part on X");
+    expect(
+      await rowCount("SELECT COUNT(*) AS n FROM items WHERE id = ?", item.id),
+    ).toBe(1);
+  });
+
+  it("a delete that arrives after Send again and the cron claim is refused, and the post goes out once", async () => {
+    await connectX();
+    const session = await asUser();
+    const item = await createItem(session, {
+      kind: "post",
+      segments: [{ text: "Sent again" }],
+    });
+    await approveAndSchedule(session, item);
+    xstate.onTweet = () => ({ statusCode: 400, data: "" });
+    await dispatch(env, Date.now());
+    const retry = await send(session, `/api/items/${item.id}/retry`, "POST", {
+      position: 0,
+      confirm: true,
+    });
+    expect(retry.status).toBe(200);
+    let racing: Promise<Response> | null = null;
+    xstate.onTweet = (index) => {
+      racing = send(session, `/api/items/${item.id}`, "DELETE", {
+        confirm: true,
+      });
+      return {
+        statusCode: 201,
+        data: JSON.stringify({ data: { id: String(9200 + index), text: "" } }),
+        responseOptions: { headers: { "content-type": "application/json" } },
+      };
+    };
+    expect((await dispatch(env, Date.now())).posted).toBe(1);
+    const refused = await (racing as unknown as Promise<Response>);
+    expect(refused.status).toBe(409);
+    expect((await readItem(session, item.id)).status).toBe("posted");
+    expect(xstate.tweets.map((tweet) => tweet.text)).toEqual([
+      "Sent again",
+      "Sent again",
+    ]);
+  });
+
+  it("Send again and a delete at the same moment end with exactly one outcome", async () => {
+    await connectX();
+    const session = await asUser();
+    for (let round = 0; round < 5; round++) {
+      resetX();
+      const text = `Retry race ${round}`;
+      const item = await createItem(session, {
+        kind: "post",
+        segments: [{ text }],
+      });
+      await approveAndSchedule(session, item);
+      xstate.onTweet = () => ({ statusCode: 400, data: "" });
+      await dispatch(env, Date.now());
+      xstate.onTweet = null;
+      const [retry, deleted] = await Promise.all([
+        send(session, `/api/items/${item.id}/retry`, "POST", {
+          position: 0,
+          confirm: true,
+        }),
+        send(session, `/api/items/${item.id}`, "DELETE", { confirm: true }),
+      ]);
+      await dispatch(env, Date.now() + 1000);
+      const sends = xstate.tweets.filter((tweet) => tweet.text === text);
+      // A retry that lands first leaves a scheduled row, which is still
+      // deletable, so a 200 retry with a 200 delete is a clean outcome too.
+      if (deleted.status === 200) {
+        expect([200, 404, 409]).toContain(retry.status);
+        await expectNothingLeft(item.id);
+        expect(sends).toHaveLength(1);
+      } else {
+        expect(deleted.status).toBe(409);
+        expect(retry.status).toBe(200);
+        expect(sends).toHaveLength(2);
+        expect((await readItem(session, item.id)).status).toBe("posted");
+      }
+    }
   });
 
   it("refuses to delete a posted item or one that is posting", async () => {
