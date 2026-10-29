@@ -7,22 +7,35 @@ function noun(item: ItemRecord): string {
   if (item.status === "scheduled") return "scheduled post";
   if (item.status === "approved") return "approved draft";
   if (item.status === "archived") return "archived draft";
+  if (item.status === "needs_you") {
+    return item.needsReason === "unknown" ? "unconfirmed post" : "failed post";
+  }
   return "draft";
 }
 
+function consequence(item: ItemRecord): string {
+  if (item.status === "scheduled") {
+    return "It comes off the queue and will not post to X. ";
+  }
+  if (item.status !== "needs_you") return "";
+  if (item.needsReason === "unknown") {
+    return "It will not be sent again. X may already have it: deleting here does not remove anything from X, so check X first. ";
+  }
+  return "It will not be sent again. ";
+}
+
 // A Delete button and its confirm dialog. Nothing is deleted until the
-// person presses Delete inside the dialog. Items that posted, or might have,
-// never get the button.
+// person presses Delete inside the dialog. Items that are posting, or have
+// any part on X, never get the button.
 export function DeleteControl(props: {
   shell: Shell;
   item: ItemRecord;
-  back?: "queue";
+  back?: "queue" | "history";
   label?: string;
 }) {
   if (!canDelete(props.item)) return null;
   const dialogId = `delete-${props.item.id}`;
   const titleId = `delete-title-${props.item.id}`;
-  const scheduled = props.item.status === "scheduled";
   return (
     <>
       <button
@@ -40,7 +53,7 @@ export function DeleteControl(props: {
             the page twice. */}
         <p class="quiet" data-preview-slot />
         <p>
-          {scheduled ? "It comes off the queue and will not post to X. " : ""}
+          {consequence(props.item)}
           This can't be undone. Archive it instead if you might want it back.
         </p>
         <form method="post" action={`/items/${props.item.id}/delete`}>

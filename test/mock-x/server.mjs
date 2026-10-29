@@ -19,6 +19,8 @@ const state = {
   failOnTweet: 0,
   tweetStatus: 0,
   tweets: 0,
+  tweetTexts: [],
+  postedTexts: [],
   requests: [],
 };
 
@@ -41,8 +43,7 @@ async function readBody(req) {
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", "http://127.0.0.1:9099");
   const path = url.pathname;
-  if (path !== "/__sign" && path !== "/__control" && path !== "/__requests")
-    record(req.method ?? "GET", path);
+  if (!path.startsWith("/__")) record(req.method ?? "GET", path);
 
   if (path === "/cdn-cgi/access/certs") {
     send(res, 200, { keys: [jwk] });
@@ -69,6 +70,8 @@ const server = createServer(async (req, res) => {
       state.failOnTweet = 0;
       state.tweetStatus = 0;
       state.tweets = 0;
+      state.tweetTexts = [];
+      state.postedTexts = [];
       state.requests = [];
       state.scope = SCOPE;
       state.username = "exampleuser";
@@ -88,6 +91,14 @@ const server = createServer(async (req, res) => {
   }
   if (path === "/__requests") {
     send(res, 200, { requests: state.requests });
+    return;
+  }
+  if (path === "/__state" && req.method === "GET") {
+    send(res, 200, {
+      tweets: state.tweets,
+      tweetTexts: state.tweetTexts,
+      postedTexts: state.postedTexts,
+    });
     return;
   }
   if (path === "/i/oauth2/authorize") {
@@ -139,12 +150,14 @@ const server = createServer(async (req, res) => {
   }
   if (path === "/2/tweets" && req.method === "POST") {
     state.tweets += 1;
+    const raw = JSON.parse((await readBody(req)).toString() || "{}");
+    state.tweetTexts.push(raw.text ?? "");
     if (state.failOnTweet && state.tweets === state.failOnTweet) return;
     if (state.tweetStatus) {
       send(res, state.tweetStatus, {});
       return;
     }
-    const raw = JSON.parse((await readBody(req)).toString() || "{}");
+    state.postedTexts.push(raw.text ?? "");
     send(res, 201, {
       data: { id: String(8000 + state.tweets), text: raw.text ?? "" },
     });

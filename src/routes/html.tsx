@@ -246,9 +246,11 @@ export function registerHtmlRoutes(app: Hono<AppEnv>): void {
     const target =
       back === "queue"
         ? "/queue"
-        : deleted.status === "archived"
-          ? "/archived"
-          : "/";
+        : back === "history"
+          ? "/history"
+          : deleted.status === "archived"
+            ? "/archived"
+            : "/";
     return c.redirect(`${target}?notice=deleted`, 303);
   });
   app.post("/items/:id/restore", async (c) => {

@@ -41,7 +41,7 @@ export default defineConfig({
   projects: [
     {
       name: "off",
-      testMatch: /off\.spec\.ts|proof\.spec\.ts|zz-dialogs\.spec\.ts/,
+      testMatch: /off\.spec\.ts|proof\.spec\.ts|delete\.spec\.ts|zz-dialogs\.spec\.ts/,
       use: { ...devices["Desktop Chrome"], baseURL: off },
     },
     {

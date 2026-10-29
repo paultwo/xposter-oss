@@ -21,7 +21,7 @@ CI runs the same checks and a gitleaks scan. A maintainer approves CI runs for f
 - Never commit secrets, tokens, `.dev.vars`, `.secrets.local`, or `wrangler.local.jsonc`. Use the placeholders in `wrangler.local.jsonc.example` and `.dev.vars.example`.
 - Never put real people's drafts or posts in fixtures. Use made-up text.
 - Tests use the mock X server in `test/mock-x`. Never point tests at the real X API.
-- Anything that can post to X must stay behind approval, and anything that might already be on X must not be deleted or changed by the app.
+- Anything that can post to X must stay behind approval. Anything that is posting, or has any part on X, must not be deleted or changed by the app. An unconfirmed send can be deleted only after a dialog that says it may already be on X.
 
 ## Reporting a security issue
 

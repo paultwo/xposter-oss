@@ -1,6 +1,7 @@
 import type { ItemRecord } from "../items/model";
 import { statusLabel } from "../lib/state";
 import { formatEt } from "../lib/time";
+import { DeleteControl } from "./delete-control";
 import { ErrorSummary, Layout } from "./layout";
 import type { Shell } from "./shell";
 import { firstLine, unknownCopy } from "./text";
@@ -49,14 +50,23 @@ export function HistoryPage(props: {
                 </time>
               </p>
               {item.status === "needs_you" ? (
-                <NeedsYou
-                  item={item}
-                  csrf={props.shell.csrf}
-                  username={props.shell.account.username}
-                  timeZone={props.shell.timeZone}
-                  now={props.now}
-                  fetchTimeoutMs={props.fetchTimeoutMs}
-                />
+                <>
+                  <NeedsYou
+                    item={item}
+                    csrf={props.shell.csrf}
+                    username={props.shell.account.username}
+                    timeZone={props.shell.timeZone}
+                    now={props.now}
+                    fetchTimeoutMs={props.fetchTimeoutMs}
+                  />
+                  <p class="actions">
+                    <DeleteControl
+                      shell={props.shell}
+                      item={item}
+                      back="history"
+                    />
+                  </p>
+                </>
               ) : item.status === "posting" ? (
                 <p>{openOnX(props.shell.account.username)}</p>
               ) : (
